@@ -301,7 +301,6 @@ function BlockGraphical() {
         this.svgElement.setAttribute("stroke", "yellow");
         this.aBitLater(function() {
             this.svgElement.setAttribute("stroke", "#d85b49");
-            this.shapeChange();
         });
         return null;
     };
@@ -426,24 +425,18 @@ function BlockLambda() {
         return this.width;
     }
     this.getArgsHeight = function() {
-        if (this.argsHeight === null) {
-            this.argsHeight = 0;
-            var thisBlock = this;
-            this.args.iterateChain(function(block) {
-                thisBlock.argsHeight += block.getHeight();
-            });
-        }
-        return this.argsHeight;
+        var height = 0;
+        this.args.iterateChain(function(block) {
+            height += block.getHeight();
+        });
+        return height;
     };
     this.getBodyHeight = function() {
-        if (this.bodyHeight === null) {
-            this.bodyHeight = 0;
-            var thisBlock = this;
-            this.body.iterateChain(function(block) {
-                thisBlock.bodyHeight += block.getHeight();
-            });
-        }
-        return this.bodyHeight;
+        var height = 0;
+        this.body.iterateChain(function(block) {
+            height += block.getHeight();
+        });
+        return height;
     };
     this.getHeight = function() {
         return this.height + this.getArgsHeight() + this.getBodyHeight();
@@ -472,12 +465,6 @@ function BlockLambda() {
         path.push([w, h]); // line down on right
         path.push([0, h]); // line back left to 0
         return path;
-    };
-    this.shapeChange = function() {
-        this.argsHeight = null;
-        this.bodyHeight = null;
-        this.svgElement.setAttribute("d", svgD(this.path()));
-        return null;
     };
     this.svg = function(x, y) {
         var path = this.path();
@@ -594,6 +581,7 @@ function Code() {
         }
         this.selectedElement.endDrag();
         this.selectedElement = null;
+        this.svgRebuild();
     };
     this.getMousePosition = function(evt) {
         var CTM = this.view.getScreenCTM();
@@ -602,8 +590,20 @@ function Code() {
             y: (evt.clientY - CTM.f) / CTM.d
         };
     };
+    this.svgClear = function() {
+        var child = this.view.lastElementChild;
+        while (child) {
+            this.view.removeChild(child);
+            child = this.view.lastElementChild;
+        }
+    };
+    this.svgRebuild = function() {
+        console.log("rebuild");
+        this.svgBuild(this.rootBlock);
+    };
     this.svgBuild = function(block) {
         this.rootBlock = block;
+        this.svgClear();
         var allElements = block.svg(1, 1);
         for (var i = 0; i < allElements.length; i++) {
             this.view.appendChild(allElements[i]);
