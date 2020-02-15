@@ -101,10 +101,11 @@ function Receptor(parentBlock) {
             return;
         }
         this.connector = connector;
+        this.parentBlock.receptorConnected();
     };
     this.disconnect = function() {
         this.connector = null;
-        this.parentBlock.receptorDisconected();
+        this.parentBlock.receptorDisconnected();
     };
     this.block = function() {
         return this.parentBlock;
@@ -287,7 +288,29 @@ function BlockGraphical() {
             this.moveRelative(dx, dy);
         }
     };
-    this.receptorDisconected = function() {
+    this.receptorDisconnected = function() {
+        if (!this.svgElement) {
+            return;
+        }
+        this.shapeChange();
+    };
+    this.receptorConnected = function() {
+        if (!this.svgElement) {
+            return;
+        }
+        this.svgElement.setAttribute("stroke", "yellow");
+        this.aBitLater(function() {
+            this.svgElement.setAttribute("stroke", "#d85b49");
+            this.shapeChange();
+        });
+        return null;
+    };
+    this.aBitLater = function(func) {
+        setTimeout(func.bind(this), 500);
+    };
+    this.shapeChange = function() {
+        // Override if the block changes shape when things are
+        // connected/disconnected
         return null;
     };
     this.lastReceptor = function() {
@@ -338,7 +361,7 @@ function BlockVar() {
         var path = this.path(x, y);
         this.position.x = x;
         this.position.y = y;
-        this.svgElement = svgPath(path);
+        this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#59fa81");
         this.svgElement.setAttribute("stroke", "#d85b49");
         this.svgElement.setAttribute("transform", translateString(x, y));
@@ -450,11 +473,17 @@ function BlockLambda() {
         path.push([0, h]); // line back left to 0
         return path;
     };
+    this.shapeChange = function() {
+        this.argsHeight = null;
+        this.bodyHeight = null;
+        this.svgElement.setAttribute("d", svgD(this.path()));
+        return null;
+    };
     this.svg = function(x, y) {
         var path = this.path();
         this.position.x = x;
         this.position.y = y;
-        this.svgElement = svgPath(path);
+        this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#59fa81");
         this.svgElement.setAttribute("stroke", "#d85b49");
         this.svgElement.setAttribute("transform", translateString(x, y));
@@ -677,7 +706,14 @@ function lineWithTab(path, fx, tx, y) {
     }
 }
 
-function svgPath(parts) {
+function svgPathElement(d) {
+    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", d);
+    path.setAttribute("stroke-width", "0.1");
+    return path;
+}
+
+function svgD(parts) {
     var first = parts.shift();
     var commands = [];
     commands.push(["M", first[0], first[1]].join(" "));
@@ -687,10 +723,7 @@ function svgPath(parts) {
     }
     commands.push("z");
     var d = commands.join(" ");
-    var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    path.setAttribute("stroke-width", "0.1");
-    return path;
+    return d;
 }
 
 function svgDottedPath(parts) {
