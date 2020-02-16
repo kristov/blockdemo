@@ -4,11 +4,11 @@ function sample_code() {
     return [
         "lambda",
         "some_function",
+        "This is a function",
         [
             ["var", "x", "Num", 10],
             ["var", "s", "String", "test"]
         ],
-        "",
         [
             ["var", "blah", "Num", 10],
             ["var", "boo", "String", "test"]
@@ -21,31 +21,26 @@ function translateString(x, y) {
 }
 
 function BlockBuild(data) {
-    // Helper function for turning a JSON structure into Block structures.
     if (data[0] === "lambda") {
-        var obj = new BlockLambda();
-        return obj.build(data);
+        return new BlockLambda(data);
     }
     if (data[0] === "bind") {
-        var obj = new BlockBind();
-        return obj.build(data);
+        return new BlockBind(data);
     }
     if (data[0] === "var") {
-        var obj = new BlockVar();
-        return obj.build(data);
+        return new BlockVar(data);
     }
-    var obj = new BlockText()
-    return obj.build(data[0]);
+    return new BlockText(data[0]);
 }
 
-function Connector(parentBlock) {
+function Connector(parentBlock, x, y) {
     // A connector is associated with the top left corner of a block and
     // enables it to connect to one or more possible receptors on other blocks.
     // Because a block has only one top left corner there is only one connector
     // per block.
     this.parentBlock = parentBlock;
     this.receptor = null;
-    this.position = {x: 0, y: 0};
+    this.position = {"x": x, "y": y};
     this.globalPosition = null;
     this.connectedTo = function() {
         return this.receptor;
@@ -90,7 +85,7 @@ function Receptor(parentBlock) {
     // Receptors are places on a block where other blocks can connect to.
     this.parentBlock = parentBlock;
     this.connector = null;
-    this.position = {x: 0, y: 0};
+    this.position = {"x": 0, "y": 0};
     this.globalPosition = null;
     this.connectedTo = function() {
         return this.connector;
@@ -138,15 +133,20 @@ function Receptor(parentBlock) {
             var block = connector.block();
         }
     };
+
+    // Set the position of the receptor relative to the (0,0) point of the
+    // parent block.
     this.setPosition = function(x, y) {
         this.position.x = x;
         this.position.y = y;
         this.globalPosition = null;
     };
+
+    // Returns the global position of the receptor for testing collisions with
+    // connectors. Receptor coordinates are defined relative to the block they
+    // belong to. This returns the SVG absolute position. Receptors can move
+    // around when the block changes shape so this is dynamic.
     this.getGlobalPosition = function() {
-        // Receptor coordinates are defined relative to the block they belong
-        // to. This returns the SVG absolute position. Receptors can move
-        // around whenthe block changes shape so this is dynamic.
         return {
             x: this.parentBlock.position.x + this.position.x,
             y: this.parentBlock.position.y + this.position.y
@@ -205,21 +205,26 @@ function pointDistance(p1, p2) {
     return Math.sqrt(dx + dy);
 }
 
-function BlockGraphical() {
+function BlockGraphical(data) {
     // This is the base class for blocks. A block is an element onscreen that
     // represents a bit of language. It holds logic common to blocks like
     // moving around and reacting to drag and drop events.
+    this.data = data;
     this.svgElement = null;
     this.svgGhostElement = null;
-    this.globalSnaps = [];
     this.position = {x: 0, y: 0};
+
+    // Every block has a connector - the top left corner of the element.
     this.connector = new Connector(this);
+
+    // Move an element by a relative amount. Also move all child elements along
+    // with it.
     this.moveRelative = function(dx, dy) {
         this.position.x += dx;
         this.position.y += dy;
         this.moveToPosition();
         // Recursively move all the child blocks.
-        var children = this.childBlocks();
+        var children = this.dragBlocks();
         for (var i = 0; i < children.length; i++) {
             children[i].moveRelative(dx, dy);
         }
@@ -230,22 +235,43 @@ function BlockGraphical() {
             return;
         }
         var dist = pointDistance(connectedTo.getGlobalPosition(), this.position);
-        if (dist >= 2) {
-            disconnectBlock(this);
+        if (dist >= 4) {
+            this.disconnect();
             this.deleteGhostElement();
         }
     };
+
+    // Move this element to the current position.
     this.moveToPosition = function() {
+        if (!this.svgElement) {
+            return;
+        }
         var transforms = this.svgElement.transform.baseVal;
         var transform = transforms.getItem(0);
         transform.setTranslate(this.position.x, this.position.y);
     };
+
+    // Can this block be dragged
     this.isDraggable = function() {
         return this.svgElement.classList.contains('draggable') ? true : false;
     };
     this.svgRemove = function() {
         this.svgElement.parentElement.removeChild(this.svgElement);
     };
+
+    // Generate a ghost element - a dotted path indicating the original
+    // position during a drag.
+    this.addGhostElement = function() {
+        var pos = this.position;
+        var path = this.path();
+        this.svgGhostElement = svgDottedPath(path);
+        this.svgGhostElement.setAttribute("stroke", "#d85b49");
+        this.svgGhostElement.setAttribute("transform", translateString(pos.x, pos.y));
+        this.svgElement.parentElement.appendChild(this.svgGhostElement);
+    };
+
+    // Remove the ghost element - the dotted line left behind when a drag is
+    // started.
     this.deleteGhostElement = function() {
         if (!this.svgGhostElement) {
             // The ghost element might have been removed mid-drag when the
@@ -257,19 +283,13 @@ function BlockGraphical() {
         this.svgElement.parentElement.removeChild(this.svgGhostElement);
         this.svgGhostElement = null;
     };
-    this.addGhostElement = function() {
-        // Generate a ghost element - a dotted path indicating the original
-        // position during a drag.
-        var pos = this.position;
-        var path = this.path();
-        this.svgGhostElement = svgDottedPath(path);
-        this.svgGhostElement.setAttribute("stroke", "#d85b49");
-        this.svgGhostElement.setAttribute("transform", translateString(pos.x, pos.y));
-        this.svgElement.parentElement.appendChild(this.svgGhostElement);
-    };
+
+    // Called when a drag is started on the element.
     this.beginDrag = function() {
         this.addGhostElement();
     };
+
+    // Called when the drag stops.
     this.endDrag = function() {
         this.deleteGhostElement();
         // This code is to mainly handle the case where the block has moved a
@@ -320,33 +340,53 @@ function BlockGraphical() {
     };
 }
 
-function BlockVar() {
-    BlockGraphical.call(this);
-    this.label = null;
-    this.type = null;
-    this.value = null;
-    this.next = new Receptor(this);
-    this.build = function(data) {
-        this.label = new BlockText();
-        this.label.build(data[1]);
-        this.type = new BlockType();
-        this.type.build(data[2]);
-        this.value = this.type.decodeValue(data[3]);
-        this.next.setPosition(0, 2);
-        return this;
-    };
+function BlockLinear(data) {
+    BlockGraphical.call(this, data);
+
+    this.receptor = new Receptor(this);
+
+    // The last receptor of a linear block is the end receptor.
     this.lastReceptor = function() {
-        return this.next;
+        return this.receptor;
     };
+
+    // Linear blocks only have one receptor: the one at the end.
     this.receptors = function() {
-        return [this.next];
+        return [this.receptor];
     };
+
+    this.dragBlocks = function() {
+        var connectedTo = this.receptor.connectedTo();
+        if (!connectedTo) {
+            return [];
+        }
+        return [connectedTo.parentBlock];
+    };
+
+    this.disconnect = function() {
+        var connectedTo = this.connector.connectedTo();
+        if (!connectedTo) {
+            return;
+        }
+        this.connector.disconnect();
+    };
+}
+
+function BlockVar(data) {
+    BlockLinear.call(this, data);
+
+    this.label = new BlockText(data[1]);
+    this.type = new BlockType(data[2]);;
+    this.value = this.type.decodeValue(data[3]);
+
     this.getHeight = function() {
         return 2;
     };
+
     this.getWidth = function() {
         return this.label.getWidth() + 1 + this.type.getWidth();
     };
+
     this.path = function() {
         var path = [];
         var h = this.getHeight();
@@ -356,10 +396,12 @@ function BlockVar() {
         lineWithTab(path, 8, 0, h);
         return path;
     };
+
     this.svg = function(x, y) {
         var path = this.path(x, y);
         this.position.x = x;
         this.position.y = y;
+        this.receptor.setPosition(x, y + 2);
         this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#59fa81");
         this.svgElement.setAttribute("stroke", "#d85b49");
@@ -368,62 +410,39 @@ function BlockVar() {
         this.svgElement.shanityBlock = this;
         return [this.svgElement];
     };
-    this.childBlocks = function() {
-        return [];
-    };
 }
 
-function BlockLambda() {
-    BlockGraphical.call(this);
-    this.label = null;
-    this.width = null;
-    this.height = 6;
-    this.args = new Receptor(this);
-    this.argsHeight = null;
-    this.comment = null;
-    this.body = new Receptor(this);
-    this.bodyHeight = null;
-    this.svgElement = null;
-    this.build = function(data) {
-        var args = data[2];
-        var body = data[4];
-        this.label = new BlockText();
-        this.label.build(data[1]);
-        this.buildChained(args, this.args);
-        this.buildChained(body, this.body);
-        this.comment = new BlockText();
-        this.comment.build(data[3]);
-        this.args.setPosition(1, 2);
-        this.body.setPosition(1, 4 + (args.length * 2));
-        return this;
-    };
+function BlockLambda(data) {
+    BlockGraphical.call(this, data);
+
     this.buildChained = function(data, receptor) {
-        if (data.length) {
-            for (var i = 0; i < data.length; i++) {
-                if (!receptor) {
-                    // error condition
-                    break;
-                }
-                var block = BlockBuild(data[i]);
-                connectBlock(receptor, block.connector);
-                receptor = block.lastReceptor();
+        for (var i = 0; i < data.length; i++) {
+            if (!receptor) {
+                break;
             }
+            var block = BlockBuild(data[i]);
+            connectBlock(receptor, block.connector);
+            receptor = block.lastReceptor();
         }
     };
+
+    //this.label = new BlockText(data[1]);
+    //this.comment = new BlockText(data[2]);
+
+    this.args = new Receptor(this);
+    this.buildChained(data[3], this.args);
+
+    this.body = new Receptor(this);
+    this.buildChained(data[4], this.body);
+
     this.receptors = function() {
         return [this.args, this.body];
     };
+
     this.getWidth = function() {
-        if (this.width === null) {
-            if (this.label === null) {
-                this.width = 6;
-            }
-            else {
-                this.width = this.label.getWidth() + 2;
-            }
-        }
-        return this.width;
-    }
+        return 6;
+    };
+
     this.getArgsHeight = function() {
         var height = 0;
         this.args.iterateChain(function(block) {
@@ -431,6 +450,7 @@ function BlockLambda() {
         });
         return height;
     };
+
     this.getBodyHeight = function() {
         var height = 0;
         this.body.iterateChain(function(block) {
@@ -438,9 +458,11 @@ function BlockLambda() {
         });
         return height;
     };
+
     this.getHeight = function() {
         return this.height + this.getArgsHeight() + this.getBodyHeight();
     };
+
     this.path = function() {
         var w = this.getWidth();
         var h = 0;
@@ -466,6 +488,7 @@ function BlockLambda() {
         path.push([0, h]); // line back left to 0
         return path;
     };
+
     this.svg = function(x, y) {
         var path = this.path();
         this.position.x = x;
@@ -479,34 +502,37 @@ function BlockLambda() {
         var svgs = [];
         svgs.push(this.svgElement);
 
-        var ah = 2;
+        var h = 2;
+        this.args.setPosition(x + 1, y + h);
         this.args.iterateChain(function(block) {
-            var elements = block.svg(x + 1, y + ah);
+            var elements = block.svg(x + 1, y + h);
             for (var i = 0; i < elements.length; i++) {
                 svgs.push(elements[i]);
             }
-            ah += block.getHeight();
+            h += block.getHeight();
         });
+        h += 2;
 
-        var bh = this.getArgsHeight() + 4;
+        this.body.setPosition(x + 1, y + h);
         this.body.iterateChain(function(block) {
-            var elements = block.svg(x + 1, y + bh);
+            var elements = block.svg(x + 1, y + h);
             for (var i = 0; i < elements.length; i++) {
                 svgs.push(elements[i]);
             }
-            bh += block.getHeight();
+            h += block.getHeight();
         });
 
         return svgs;
     };
-    this.childBlocks = function() {
+
+    this.dragBlocks = function() {
         var blocks = [];
-        this.args.iterateChain(function(block) {
-            blocks.push(block);
-        });
-        this.body.iterateChain(function(block) {
-            blocks.push(block);
-        });
+        if (this.args.connectedTo()) {
+            blocks.push(this.args.connectedTo().parentBlock);
+        }
+        if (this.body.connectedTo()) {
+            blocks.push(this.body.connectedTo().parentBlock);
+        }
         return blocks;
     };
 }
