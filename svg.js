@@ -41,7 +41,6 @@ function Connector(parentBlock, x, y) {
     this.parentBlock = parentBlock;
     this.receptor = null;
     this.position = {"x": x, "y": y};
-    this.globalPosition = null;
     this.connectedTo = function() {
         return this.receptor;
     };
@@ -71,7 +70,6 @@ function Connector(parentBlock, x, y) {
     this.setPosition = function(x, y) {
         this.position.x = x;
         this.position.y = y;
-        this.globalPosition = null;
     };
     this.getGlobalPosition = function() {
         return {
@@ -86,7 +84,6 @@ function Receptor(parentBlock) {
     this.parentBlock = parentBlock;
     this.connector = null;
     this.position = {"x": 0, "y": 0};
-    this.globalPosition = null;
     this.connectedTo = function() {
         return this.connector;
     };
@@ -139,7 +136,6 @@ function Receptor(parentBlock) {
     this.setPosition = function(x, y) {
         this.position.x = x;
         this.position.y = y;
-        this.globalPosition = null;
     };
 
     // Returns the global position of the receptor for testing collisions with
@@ -390,10 +386,12 @@ function BlockVar(data) {
     this.path = function() {
         var path = [];
         var h = this.getHeight();
-        path.push([0, 0]);
-        lineWithTab(path, 0, 8, 0);
+        path.push([0, 0.5]);
+        path.push([0.5, 0]);
+        path.push([8, 0]);
         path.push([8, h]);
-        lineWithTab(path, 8, 0, h);
+        path.push([0.5, h]);
+        path.push([0, h + 0.5]);
         return path;
     };
 
@@ -403,8 +401,8 @@ function BlockVar(data) {
         this.position.y = y;
         this.receptor.setPosition(x, y + 2);
         this.svgElement = svgPathElement(svgD(path));
-        this.svgElement.setAttribute("fill", "#59fa81");
-        this.svgElement.setAttribute("stroke", "#d85b49");
+        this.svgElement.setAttribute("fill", "#7d5af0");
+        this.svgElement.setAttribute("stroke", "#d880b8");
         this.svgElement.setAttribute("transform", translateString(x, y));
         this.svgElement.setAttribute("class", "draggable");
         this.svgElement.shanityBlock = this;
@@ -467,25 +465,31 @@ function BlockLambda(data) {
         var w = this.getWidth();
         var h = 0;
         var path = [];
-        path.push([0, 0]); // start
-        path.push([w, h]); // top line across to right
+
+        path.push([0, h]);
+        path.push([w, h]);
         h += 2;
-        path.push([w, h]); // line down on right
-        lineWithTab(path, w, 1, h);
-        var ah = h;
+        path.push([w, h]);
+        path.push([1.5, h]);
+        path.push([1, h + 0.5]);
+
         h += this.getArgsHeight();
-        path.push([1, h]); // left hand line down where args are
-        lineWithTab(path, 1, w, h);
+        path.push([1, h + 0.5]);
+        path.push([1.5, h]);
+        path.push([w, h]);
         h += 2;
-        path.push([w, h]); // line down on right
-        lineWithTab(path, w, 1, h);
-        var bh = h;
+        path.push([w, h]);
+        path.push([1.5, h]);
+        path.push([1, h + 0.5]);
+
         h += this.getBodyHeight();
-        path.push([1, h]); // left hand line down where body is
-        lineWithTab(path, 1, w, h);
+        path.push([1, h + 0.5]);
+        path.push([1.5, h]);
+        path.push([w, h]);
         h += 2;
-        path.push([w, h]); // line down on right
-        path.push([0, h]); // line back left to 0
+        path.push([w, h]);
+        path.push([0, h]);
+
         return path;
     };
 
@@ -494,8 +498,8 @@ function BlockLambda(data) {
         this.position.x = x;
         this.position.y = y;
         this.svgElement = svgPathElement(svgD(path));
-        this.svgElement.setAttribute("fill", "#59fa81");
-        this.svgElement.setAttribute("stroke", "#d85b49");
+        this.svgElement.setAttribute("fill", "#308840");
+        this.svgElement.setAttribute("stroke", "#28c0c0");
         this.svgElement.setAttribute("transform", translateString(x, y));
         this.svgElement.setAttribute("class", "draggable");
         this.svgElement.shanityBlock = this;
@@ -735,7 +739,7 @@ function lineWithTab(path, fx, tx, y) {
 function svgPathElement(d) {
     var path = document.createElementNS("http://www.w3.org/2000/svg", "path");
     path.setAttribute("d", d);
-    path.setAttribute("stroke-width", "0.1");
+    path.setAttribute("stroke-width", "0.2");
     return path;
 }
 
