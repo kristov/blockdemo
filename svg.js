@@ -314,12 +314,11 @@ function BlockLinear(data) {
     };
 
     this.dragBlocks = function() {
-        var connectedTo = this.receptor.connectedTo();
-        if (!connectedTo) {
-            console.log("receptor for " + this.label + " is not connected");
-            return [];
-        }
-        return [connectedTo.parentBlock];
+        var blocks = [];
+        this.receptor.iterateChain(function(block) {
+            blocks.push(block);
+        });
+        return blocks;
     };
 }
 
