@@ -33,44 +33,43 @@ function BlockBuild(data) {
     return new BlockText(data[0]);
 }
 
-function Connector(parentBlock, x, y) {
+function Connector(parentBlock) {
     // A connector is associated with the top left corner of a block and
     // enables it to connect to one or more possible receptors on other blocks.
     // Because a block has only one top left corner there is only one connector
     // per block.
+
     this.parentBlock = parentBlock;
     this.receptor = null;
-    this.position = {"x": x, "y": y};
+    this.position = {"x": 0, "y": 0};
+
     this.connectedTo = function() {
         return this.receptor;
     };
+
     this.connect = function(receptor) {
-        if (this.receptor != null) {
+        if (this.receptor) {
             // The caller must disconect the receptor and decide what to do
             // about that before calling this.
+            console.log("connector already has a receptor");
             return;
         }
-        this.receptor = receptor;
+        if (receptor.connect(this)) {
+            this.receptor = receptor;
+            return true;
+        }
     };
+
     this.disconnect = function() {
+        console.log("connector on " + this.parentBlock.label + " disconnecting from receptor on " + this.receptor.parentBlock.label);
+        this.receptor.disconnect();
         this.receptor = null;
     };
-    this.append = function(connector) {
-        var last = this.parentBlock.lastReceptor();
-        if (!last) {
-            return false;
-        }
-        connector.disconnect();
-        connector.connect(last);
-        return true;
-    };
+
     this.block = function() {
         return this.parentBlock;
     };
-    this.setPosition = function(x, y) {
-        this.position.x = x;
-        this.position.y = y;
-    };
+
     this.getGlobalPosition = function() {
         return {
             x: this.parentBlock.position.x + this.position.x,
@@ -84,24 +83,29 @@ function Receptor(parentBlock) {
     this.parentBlock = parentBlock;
     this.connector = null;
     this.position = {"x": 0, "y": 0};
+
     this.connectedTo = function() {
         return this.connector;
     };
+
     this.connect = function(connector) {
-        if (this.conector != null) {
+        if (this.conector) {
             console.log("could not connect connector to this occupied receptor");
             return;
         }
         this.connector = connector;
         this.parentBlock.receptorConnected();
+        return true;
     };
+
     this.disconnect = function() {
         this.connector = null;
-        this.parentBlock.receptorDisconnected();
     };
+
     this.block = function() {
         return this.parentBlock;
     };
+
     this.iterateChain = function(callback) {
         // Blocks with a connector at the top and a receptor at the bottom can
         // form chains or linked lists of blocks. This function can be used to
@@ -127,7 +131,7 @@ function Receptor(parentBlock) {
                 // There is a receptor but it isnt connected to anything.
                 break;
             }
-            var block = connector.block();
+            block = connector.block();
         }
     };
 
@@ -150,49 +154,6 @@ function Receptor(parentBlock) {
     };
 }
 
-function connectBlock(receptor, connector) {
-    // This is a helper function to connect a receptor and a connector
-    // together. It implements the "business logic" of when a connection is
-    // made.
-    if (connector.connectedTo()) {
-        return;
-    };
-    var connectorExisting = receptor.connectedTo();
-    if (connectorExisting) {
-        // If the receptor is already connected to something, get that
-        // something and connect it to the end of the thing we are connecting.
-        // This should work like unshift().
-        if (!connector.append(connectorExisting)) {
-            // The new thing we are connecting might be a terminating block and
-            // it doesnt have a receptor at the end. In which case we dont want
-            // to make this connection.
-            return;
-        }
-        console.log("appended connectorExisting");
-        receptor.disconnect();
-    }
-    receptor.connect(connector);
-    connector.connect(receptor);
-}
-
-function disconnectBlock(block) {
-    // Helper function for when receptor and connector get too far apart. First
-    // check if we are actually connected to something.
-    var connectedTo = block.connector.connectedTo();
-    if (!connectedTo) {
-        return;
-    }
-    block.connector.disconnect();
-    var last = block.lastReceptor();
-    if (last) {
-        // This will connect the next block in the chain to the original
-        // receptor. Otherwise removing a block from the middle of a chain
-        // would leave the chain broken.
-        var lastConnectedTo = last.connectedTo();
-        connectedTo.connect(lastConnectedTo);
-    }
-}
-
 function pointDistance(p1, p2) {
     var dx = p1.x - p2.x;
     dx = dx * dx;
@@ -211,7 +172,6 @@ function BlockGraphical(data) {
     this.position = {x: 0, y: 0};
 
     // Every block has a connector - the top left corner of the element.
-    this.connector = new Connector(this);
 
     // Move an element by a relative amount. Also move all child elements along
     // with it.
@@ -219,20 +179,26 @@ function BlockGraphical(data) {
         this.position.x += dx;
         this.position.y += dy;
         this.moveToPosition();
+
         // Recursively move all the child blocks.
         var children = this.dragBlocks();
         for (var i = 0; i < children.length; i++) {
             children[i].moveRelative(dx, dy);
         }
+
         // If the block is connected to something detect if it got moved too
         // far away and disconnect it if so.
+        if (!this.connector) {
+            return;
+        }
         var connectedTo = this.connector.connectedTo();
         if (!connectedTo) {
+            console.log("no connectedTo");
             return;
         }
         var dist = pointDistance(connectedTo.getGlobalPosition(), this.position);
-        if (dist >= 4) {
-            this.disconnect();
+        if (dist >= 2) {
+            this.connector.disconnect();
             this.deleteGhostElement();
         }
     };
@@ -288,9 +254,12 @@ function BlockGraphical(data) {
     // Called when the drag stops.
     this.endDrag = function() {
         this.deleteGhostElement();
-        // This code is to mainly handle the case where the block has moved a
-        // short distance but is still connected to the original receptor. We
-        // want to move it back to its original position.
+        // This code is to handle the case where the block has moved a short
+        // distance but is still connected to the original receptor. We want to
+        // move it back to its original position.
+        if (!this.connector) {
+            return;
+        }
         var connectedTo = this.connector.connectedTo();
         if (!connectedTo) {
             // It is no longer connected to anything so we dont need to move it
@@ -304,12 +273,7 @@ function BlockGraphical(data) {
             this.moveRelative(dx, dy);
         }
     };
-    this.receptorDisconnected = function() {
-        if (!this.svgElement) {
-            return;
-        }
-        this.shapeChange();
-    };
+
     this.receptorConnected = function() {
         if (!this.svgElement) {
             return;
@@ -320,14 +284,11 @@ function BlockGraphical(data) {
         });
         return null;
     };
+
     this.aBitLater = function(func) {
         setTimeout(func.bind(this), 500);
     };
-    this.shapeChange = function() {
-        // Override if the block changes shape when things are
-        // connected/disconnected
-        return null;
-    };
+
     this.lastReceptor = function() {
         // The lastReceptor is for blocks where things can be appended to the
         // end. A lambda for example is not appendable because program flow can
@@ -339,6 +300,7 @@ function BlockGraphical(data) {
 function BlockLinear(data) {
     BlockGraphical.call(this, data);
 
+    this.connector = new Connector(this);
     this.receptor = new Receptor(this);
 
     // The last receptor of a linear block is the end receptor.
@@ -354,26 +316,21 @@ function BlockLinear(data) {
     this.dragBlocks = function() {
         var connectedTo = this.receptor.connectedTo();
         if (!connectedTo) {
+            console.log("receptor for " + this.label + " is not connected");
             return [];
         }
         return [connectedTo.parentBlock];
-    };
-
-    this.disconnect = function() {
-        var connectedTo = this.connector.connectedTo();
-        if (!connectedTo) {
-            return;
-        }
-        this.connector.disconnect();
     };
 }
 
 function BlockVar(data) {
     BlockLinear.call(this, data);
 
-    this.label = new BlockText(data[1]);
-    this.type = new BlockType(data[2]);;
-    this.value = this.type.decodeValue(data[3]);
+    this.label = data[1];
+
+    //this.label = new BlockText(data[1]);
+    //this.type = new BlockType(data[2]);;
+    //this.value = this.type.decodeValue(data[3]);
 
     this.getHeight = function() {
         return 2;
@@ -413,13 +370,15 @@ function BlockVar(data) {
 function BlockLambda(data) {
     BlockGraphical.call(this, data);
 
-    this.buildChained = function(data, receptor) {
-        for (var i = 0; i < data.length; i++) {
+    this.label = data[1];
+
+    this.buildChained = function(list, receptor) {
+        for (var i = 0; i < list.length; i++) {
             if (!receptor) {
                 break;
             }
-            var block = BlockBuild(data[i]);
-            connectBlock(receptor, block.connector);
+            var block = BlockBuild(list[i]);
+            block.connector.connect(receptor);
             receptor = block.lastReceptor();
         }
     };
@@ -600,7 +559,7 @@ function Code() {
                 var receptor = receptors[j];
                 var pos = receptor.getGlobalPosition();
                 if (elem.position.x === pos.x && elem.position.y === pos.y) {
-                    connectBlock(receptor, elem.connector);
+                    elem.connector.connect(receptor);
                 }
             }
         }
