@@ -51,7 +51,6 @@ function Connector(parentBlock) {
         if (this.receptor) {
             // The caller must disconect the receptor and decide what to do
             // about that before calling this.
-            console.log("connector already has a receptor");
             return;
         }
         if (receptor.connect(this)) {
@@ -61,7 +60,6 @@ function Connector(parentBlock) {
     };
 
     this.disconnect = function() {
-        console.log("connector on " + this.parentBlock.label + " disconnecting from receptor on " + this.receptor.parentBlock.label);
         this.receptor.disconnect();
         this.receptor = null;
     };
@@ -90,7 +88,6 @@ function Receptor(parentBlock) {
 
     this.connect = function(connector) {
         if (this.conector) {
-            console.log("could not connect connector to this occupied receptor");
             return;
         }
         this.connector = connector;
@@ -193,7 +190,6 @@ function BlockGraphical(data) {
         }
         var connectedTo = this.connector.connectedTo();
         if (!connectedTo) {
-            console.log("no connectedTo");
             return;
         }
         var dist = pointDistance(connectedTo.getGlobalPosition(), this.position);
@@ -302,6 +298,7 @@ function BlockLinear(data) {
 
     this.connector = new Connector(this);
     this.receptor = new Receptor(this);
+    this.receptor.setPosition(0, 2);
 
     // The last receptor of a linear block is the end receptor.
     this.lastReceptor = function() {
@@ -314,11 +311,11 @@ function BlockLinear(data) {
     };
 
     this.dragBlocks = function() {
-        var blocks = [];
-        this.receptor.iterateChain(function(block) {
-            blocks.push(block);
-        });
-        return blocks;
+        var connectedTo = this.receptor.connectedTo();
+        if (!connectedTo) {
+            return [];
+        }
+        return [connectedTo.parentBlock];
     };
 }
 
@@ -355,7 +352,6 @@ function BlockVar(data) {
         var path = this.path(x, y);
         this.position.x = x;
         this.position.y = y;
-        this.receptor.setPosition(x, y + 2);
         this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#7d5af0");
         this.svgElement.setAttribute("stroke", "#d880b8");
@@ -465,7 +461,7 @@ function BlockLambda(data) {
         svgs.push(this.svgElement);
 
         var h = 2;
-        this.args.setPosition(x + 1, y + h);
+        this.args.setPosition(1, 2);
         this.args.iterateChain(function(block) {
             var elements = block.svg(x + 1, y + h);
             for (var i = 0; i < elements.length; i++) {
@@ -475,7 +471,7 @@ function BlockLambda(data) {
         });
         h += 2;
 
-        this.body.setPosition(x + 1, y + h);
+        this.body.setPosition(1, 4 + this.getArgsHeight());
         this.body.iterateChain(function(block) {
             var elements = block.svg(x + 1, y + h);
             for (var i = 0; i < elements.length; i++) {
