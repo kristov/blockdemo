@@ -33,35 +33,35 @@ function BlockBuild(data) {
     return new BlockText(data[0]);
 }
 
-function Connector(parentBlock) {
-    // A connector is associated with the top left corner of a block and
-    // enables it to connect to one or more possible receptors on other blocks.
-    // Because a block has only one top left corner there is only one connector
+function Plug(parentBlock) {
+    // A plug is associated with the top left corner of a block and
+    // enables it to connect to one or more possible sockets on other blocks.
+    // Because a block has only one top left corner there is only one plug
     // per block.
 
     this.parentBlock = parentBlock;
-    this.receptor = null;
+    this.socket = null;
     this.position = {"x": 0, "y": 0};
 
     this.connectedTo = function() {
-        return this.receptor;
+        return this.socket;
     };
 
-    this.connect = function(receptor) {
-        if (this.receptor) {
-            // The caller must disconect the receptor and decide what to do
+    this.connect = function(socket) {
+        if (this.socket) {
+            // The caller must disconect the socket and decide what to do
             // about that before calling this.
             return;
         }
-        if (receptor.connect(this)) {
-            this.receptor = receptor;
+        if (socket.connect(this)) {
+            this.socket = socket;
             return true;
         }
     };
 
     this.disconnect = function() {
-        this.receptor.disconnect();
-        this.receptor = null;
+        this.socket.disconnect();
+        this.socket = null;
     };
 
     this.block = function() {
@@ -76,27 +76,27 @@ function Connector(parentBlock) {
     };
 }
 
-function Receptor(parentBlock) {
-    // Receptors are places on a block where other blocks can connect to.
+function Socket(parentBlock) {
+    // Sockets are places on a block where other blocks can connect to.
     this.parentBlock = parentBlock;
-    this.connector = null;
+    this.plug = null;
     this.position = {"x": 0, "y": 0};
 
     this.connectedTo = function() {
-        return this.connector;
+        return this.plug;
     };
 
-    this.connect = function(connector) {
+    this.connect = function(plug) {
         if (this.conector) {
             return;
         }
-        this.connector = connector;
-        this.parentBlock.receptorConnected();
+        this.plug = plug;
+        this.parentBlock.socketConnected();
         return true;
     };
 
     this.disconnect = function() {
-        this.connector = null;
+        this.plug = null;
     };
 
     this.block = function() {
@@ -104,44 +104,44 @@ function Receptor(parentBlock) {
     };
 
     this.iterateChain = function(callback) {
-        // Blocks with a connector at the top and a receptor at the bottom can
+        // Blocks with a plug at the top and a socket at the bottom can
         // form chains or linked lists of blocks. This function can be used to
         // iterate through such a list and perform some callback on the block.
-        // It is called on the receptor that the first block connector is
-        // attached to - the parent receptor.
-        var receptor = this;
-        var connector = receptor.connectedTo();
-        if (!connector) {
+        // It is called on the socket that the first block plug is
+        // attached to - the parent socket.
+        var socket = this;
+        var plug = socket.connectedTo();
+        if (!plug) {
             return;
         }
-        var block = connector.block();
+        var block = plug.block();
         while (block) {
             callback(block);
-            receptor = block.lastReceptor();
-            if (!receptor) {
-                // This block has no lastReceptor, for example a terminating
+            socket = block.lastSocket();
+            if (!socket) {
+                // This block has no lastSocket, for example a terminating
                 // block like a "return" block.
                 break;
             }
-            var connector = receptor.connectedTo();
-            if (!connector) {
-                // There is a receptor but it isnt connected to anything.
+            var plug = socket.connectedTo();
+            if (!plug) {
+                // There is a socket but it isnt connected to anything.
                 break;
             }
-            block = connector.block();
+            block = plug.block();
         }
     };
 
-    // Set the position of the receptor relative to the (0,0) point of the
+    // Set the position of the socket relative to the (0,0) point of the
     // parent block.
     this.setPosition = function(x, y) {
         this.position.x = x;
         this.position.y = y;
     };
 
-    // Returns the global position of the receptor for testing collisions with
-    // connectors. Receptor coordinates are defined relative to the block they
-    // belong to. This returns the SVG absolute position. Receptors can move
+    // Returns the global position of the socket for testing collisions with
+    // plugs. Socket coordinates are defined relative to the block they
+    // belong to. This returns the SVG absolute position. Sockets can move
     // around when the block changes shape so this is dynamic.
     this.getGlobalPosition = function() {
         return {
@@ -168,7 +168,7 @@ function BlockGraphical(data) {
     this.svgGhostElement = null;
     this.position = {x: 0, y: 0};
 
-    // Every block has a connector - the top left corner of the element.
+    // Every block has a plug - the top left corner of the element.
 
     // Move an element by a relative amount. Also move all child elements along
     // with it.
@@ -185,16 +185,16 @@ function BlockGraphical(data) {
 
         // If the block is connected to something detect if it got moved too
         // far away and disconnect it if so.
-        if (!this.connector) {
+        if (!this.plug) {
             return;
         }
-        var connectedTo = this.connector.connectedTo();
+        var connectedTo = this.plug.connectedTo();
         if (!connectedTo) {
             return;
         }
         var dist = pointDistance(connectedTo.getGlobalPosition(), this.position);
         if (dist >= 2) {
-            this.connector.disconnect();
+            this.plug.disconnect();
             this.deleteGhostElement();
         }
     };
@@ -233,7 +233,7 @@ function BlockGraphical(data) {
     this.deleteGhostElement = function() {
         if (!this.svgGhostElement) {
             // The ghost element might have been removed mid-drag when the
-            // connectors get too far apart. As this is also called at the end
+            // plugs get too far apart. As this is also called at the end
             // of a drag regardless we need to make sure we are not removing
             // something already removed.
             return;
@@ -251,12 +251,12 @@ function BlockGraphical(data) {
     this.endDrag = function() {
         this.deleteGhostElement();
         // This code is to handle the case where the block has moved a short
-        // distance but is still connected to the original receptor. We want to
+        // distance but is still connected to the original socket. We want to
         // move it back to its original position.
-        if (!this.connector) {
+        if (!this.plug) {
             return;
         }
-        var connectedTo = this.connector.connectedTo();
+        var connectedTo = this.plug.connectedTo();
         if (!connectedTo) {
             // It is no longer connected to anything so we dont need to move it
             // back there.
@@ -270,7 +270,7 @@ function BlockGraphical(data) {
         }
     };
 
-    this.receptorConnected = function() {
+    this.socketConnected = function() {
         if (!this.svgElement) {
             return;
         }
@@ -285,8 +285,8 @@ function BlockGraphical(data) {
         setTimeout(func.bind(this), 500);
     };
 
-    this.lastReceptor = function() {
-        // The lastReceptor is for blocks where things can be appended to the
+    this.lastSocket = function() {
+        // The lastSocket is for blocks where things can be appended to the
         // end. A lambda for example is not appendable because program flow can
         // not fall through at the end of a function call.
         return null;
@@ -296,22 +296,22 @@ function BlockGraphical(data) {
 function BlockLinear(data) {
     BlockGraphical.call(this, data);
 
-    this.connector = new Connector(this);
-    this.receptor = new Receptor(this);
-    this.receptor.setPosition(0, 2);
+    this.plug = new Plug(this);
+    this.socket = new Socket(this);
+    this.socket.setPosition(0, 2);
 
-    // The last receptor of a linear block is the end receptor.
-    this.lastReceptor = function() {
-        return this.receptor;
+    // The last socket of a linear block is the end socket.
+    this.lastSocket = function() {
+        return this.socket;
     };
 
-    // Linear blocks only have one receptor: the one at the end.
-    this.receptors = function() {
-        return [this.receptor];
+    // Linear blocks only have one socket: the one at the end.
+    this.sockets = function() {
+        return [this.socket];
     };
 
     this.dragBlocks = function() {
-        var connectedTo = this.receptor.connectedTo();
+        var connectedTo = this.socket.connectedTo();
         if (!connectedTo) {
             return [];
         }
@@ -367,27 +367,27 @@ function BlockLambda(data) {
 
     this.label = data[1];
 
-    this.buildChained = function(list, receptor) {
+    this.buildChained = function(list, socket) {
         for (var i = 0; i < list.length; i++) {
-            if (!receptor) {
+            if (!socket) {
                 break;
             }
             var block = BlockBuild(list[i]);
-            block.connector.connect(receptor);
-            receptor = block.lastReceptor();
+            block.plug.connect(socket);
+            socket = block.lastSocket();
         }
     };
 
     //this.label = new BlockText(data[1]);
     //this.comment = new BlockText(data[2]);
 
-    this.args = new Receptor(this);
+    this.args = new Socket(this);
     this.buildChained(data[3], this.args);
 
-    this.body = new Receptor(this);
+    this.body = new Socket(this);
     this.buildChained(data[4], this.body);
 
-    this.receptors = function() {
+    this.sockets = function() {
         return [this.args, this.body];
     };
 
@@ -549,12 +549,12 @@ function Code() {
             if (!block) {
                 continue;
             }
-            var receptors = block.receptors();
-            for (var j = 0; j < receptors.length; j++) {
-                var receptor = receptors[j];
-                var pos = receptor.getGlobalPosition();
+            var sockets = block.sockets();
+            for (var j = 0; j < sockets.length; j++) {
+                var socket = sockets[j];
+                var pos = socket.getGlobalPosition();
                 if (elem.position.x === pos.x && elem.position.y === pos.y) {
-                    elem.connector.connect(receptor);
+                    elem.plug.connect(socket);
                 }
             }
         }
