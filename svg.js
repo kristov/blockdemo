@@ -10,25 +10,24 @@ function sample_code() {
             ["var", "s", "String", "test"]
         ],
         [
-            ["var", "blah", "Num", 10],
-            ["var", "boo", "String", "test"]
+            ["var", "boo", "String", "test"],
+            ["return", ["call", "string.concat", [["sym", "blah"], ["sym", "s"]]]]
         ]
     ];
-}
-
-function translateString(x, y) {
-    return "translate(" + x + "," + y + ")";
 }
 
 function BlockBuild(data) {
     if (data[0] === "lambda") {
         return new BlockLambda(data);
     }
-    if (data[0] === "bind") {
-        return new BlockBind(data);
-    }
     if (data[0] === "var") {
         return new BlockVar(data);
+    }
+    if (data[0] === "return") {
+        return new BlockReturn(data);
+    }
+    if (data[0] === "call") {
+        return new BlockCall(data);
     }
     return new BlockText(data[0]);
 }
@@ -224,7 +223,7 @@ function BlockGraphical(data) {
         var path = this.path();
         this.svgGhostElement = svgDottedPath(path);
         this.svgGhostElement.setAttribute("stroke", "#d85b49");
-        this.svgGhostElement.setAttribute("transform", translateString(pos.x, pos.y));
+        this.svgGhostElement.setAttribute("transform", `translate(${pos.x}, ${pos.y})`);
         this.svgElement.parentElement.appendChild(this.svgGhostElement);
     };
 
@@ -293,6 +292,34 @@ function BlockGraphical(data) {
     };
 }
 
+function BlockReturn(data) {
+    BlockGraphical.call(this);
+
+    this.plug = new Plug(this);
+
+    // Returns are the end of a chain
+    this.lastSocket = function() {
+        return null;
+    };
+
+    this.getHeight = function() {
+        return 2;
+    };
+
+    // Returns have no sockts
+    this.sockets = function() {
+        return [];
+    };
+
+    this.svg = function() {
+        return [];
+    };
+
+    this.dragBlocks = function() {
+        return [];
+    };
+}
+
 function BlockLinear(data) {
     BlockGraphical.call(this, data);
 
@@ -355,7 +382,7 @@ function BlockVar(data) {
         this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#7d5af0");
         this.svgElement.setAttribute("stroke", "#d880b8");
-        this.svgElement.setAttribute("transform", translateString(x, y));
+        this.svgElement.setAttribute("transform", `translate(${x}, ${y})`)
         this.svgElement.setAttribute("class", "draggable");
         this.svgElement.shanityBlock = this;
         return [this.svgElement];
@@ -454,7 +481,7 @@ function BlockLambda(data) {
         this.svgElement = svgPathElement(svgD(path));
         this.svgElement.setAttribute("fill", "#308840");
         this.svgElement.setAttribute("stroke", "#28c0c0");
-        this.svgElement.setAttribute("transform", translateString(x, y));
+        this.svgElement.setAttribute("transform", `translate(${x}, ${y})`);
         this.svgElement.setAttribute("class", "draggable");
         this.svgElement.shanityBlock = this;
         var svgs = [];
@@ -592,28 +619,6 @@ function Code() {
         for (var i = 0; i < allElements.length; i++) {
             this.view.appendChild(allElements[i]);
         }
-    };
-}
-
-function BlockType() {
-    BlockGraphical.call(this);
-    this.label = null;
-    this.svgElement = null;
-    this.build = function(data) {
-        this.label = new BlockText();
-        this.label.build(data);
-        return this;
-    };
-    this.decodeValue = function(data) {
-    };
-    this.getHeight = function() {
-        return this.label.getHeight();
-    };
-    this.getWidth = function() {
-        return this.label.getWidth();
-    };
-    this.svg = function(x, y) {
-        //this.svgElement.shanityBlock = this;
     };
 }
 
